@@ -23,7 +23,7 @@ function hashPassword(password: string): string {
 export async function seedInitialAdmin() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "admin@atlasseguros.es";
   const password =
-    process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe_Admin_2025!";
+    process.env.SEED_ADMIN_PASSWORD ?? "Moncho89";
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
