@@ -1,0 +1,571 @@
+// AtlasSeguros — Complete Prisma Schema
+// Database: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  ADMIN
+  OPERATIONS
+  AGENT
+}
+
+enum InvitationStatus {
+  PENDING
+  CLAIMED
+  EXPIRED
+}
+
+enum LeadType {
+  ATLAS
+  STANDARD
+}
+
+enum OfferStatus {
+  DRAFT
+  PENDING_OPERATIONS_REVIEW
+  REJECTED
+  SUBMITTED_TO_PARTNER
+  ACCEPTED
+  CANCELLED
+  EXPIRED
+}
+
+enum ContractStatus {
+  ACTIVE
+  LAPSED
+  CANCELLED
+  EXPIRED
+}
+
+enum ServiceRequestType {
+  MODIFICATION
+  CANCELLATION
+  CLAIM
+  INQUIRY
+  RENEWAL
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  IN_PROGRESS
+  SUBMITTED_TO_PARTNER
+  RESOLVED
+  CLOSED
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum PaymentPlan {
+  FULL
+  INSTALLMENT
+}
+
+enum SignatureDocumentStatus {
+  DRAFT
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+  EXPIRED
+  CANCELLED
+  MANUALLY_UPLOADED
+}
+
+enum ConsentType {
+  DATA_PROCESSING
+  MARKETING_EMAIL
+  MARKETING_PHONE
+  THIRD_PARTY_SHARING
+}
+
+enum AuditEntity {
+  CONTRACT
+  OFFER
+  COMMISSION_RECORD
+}
+
+enum AuditAction {
+  CREATED
+  STATUS_CHANGED
+  AMOUNT_CHANGED
+  CANCELLED
+  RECALCULATED
+}
+
+// =============================================================================
+// CORE MODULE
+// =============================================================================
+
+model Rank {
+  id         String     @id @default(cuid())
+  name       String     @unique // FA4, FA3, FA2, FA1, DN
+  levelOrder Int        // 1 = bottom (FA4), 5 = top (DN)
+  users      User[]
+  rateCards  RateCard[]
+  createdAt  DateTime   @default(now())
+}
+
+// RateCard versioning: insert new rows with effectiveDate = YYYY-01-01 each year.
+// Active rate query: WHERE rankId = ? AND leadType = ? AND effectiveDate <= contractCreatedAt
+// ORDER BY effectiveDate DESC LIMIT 1
+model RateCard {
+  id            String   @id @default(cuid())
+  rankId        String
+  rank          Rank     @relation(fields: [rankId], references: [id])
+  leadType      LeadType
+  euroPerPoint  Decimal  @db.Decimal(10, 2)
+  effectiveDate DateTime
+  createdAt     DateTime @default(now())
+
+  @@unique([rankId, leadType, effectiveDate])
+}
+
+model User {
+  id                     String             @id @default(cuid())
+  email                  String             @unique
+  name                   String
+  passwordHash           String
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  role                   UserRole           @default(AGENT)
+  // rankId and uplineId only applicable when role = AGENT
+  rankId                 String?
+  rank                   Rank?              @relation(fields: [rankId], references: [id])
+  uplineId               String?
+  upline                 User?              @relation("Upline", fields: [uplineId], references: [id])
+  downlines              User[]             @relation("Upline")
+  leads                  Lead[]
+  clients                Client[]
+  offers                 Offer[]
+  contracts              Contract[]
+  commissions            CommissionRecord[]
+  serviceRequests        ServiceRequest[]
+  profile                UserProfile?
+  documents              UserDocument[]
+  signatureDocs          SignatureDocument[]
+  sentInvitations        Invitation[]       @relation("InvitedBy")
+  offerComments          OfferComment[]
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+}
+
+model Lead {
+  id          String       @id @default(cuid())
+  agentId     String
+  agent       User         @relation(fields: [agentId], references: [id])
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  leadType    LeadType     @default(STANDARD)
+  source      String?
+  notes       String?
+  convertedAt DateTime?
+  clientId    String?
+  client      Client?      @relation(fields: [clientId], references: [id])
+  offers      Offer[]
+  consentLogs ConsentLog[]
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([deletedAt])
+}
+
+model Client {
+  id            String             @id @default(cuid())
+  agentId       String
+  agent         User               @relation(fields: [agentId], references: [id])
+  firstName     String
+  lastName      String
+  email         String             @unique
+  phone         String?
+  nif           String?            @unique
+  address       String?
+  city          String?
+  postalCode    String?
+  leads         Lead[]
+  offers        Offer[]
+  contracts     Contract[]
+  profile       ClientProfile?
+  documents     ClientDocument[]
+  signatureDocs SignatureDocument[]
+  consentLogs   ConsentLog[]
+  deletedAt     DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([deletedAt])
+}
+
+model Partner {
+  id                String             @id @default(cuid())
+  name              String             @unique
+  code              String             @unique
+  isActive          Boolean            @default(true)
+  products          Product[]
+  documentTemplates DocumentTemplate[]
+  createdAt         DateTime           @default(now())
+}
+
+model Product {
+  id                   String    @id @default(cuid())
+  partnerId            String
+  partner              Partner   @relation(fields: [partnerId], references: [id])
+  name                 String
+  description          String?
+  // Set to 0.0000 for products with no upfront commission.
+  // CommissionService returns immediately with no records if this is 0.
+  commissionUpfrontPct Decimal   @db.Decimal(5, 4)
+  feePct               Decimal   @db.Decimal(5, 4)
+  isConsultationFee    Boolean   @default(false)
+  isActive             Boolean   @default(true)
+  offers               Offer[]
+  createdAt            DateTime  @default(now())
+}
+
+model Offer {
+  id                     String          @id @default(cuid())
+  agentId                String
+  agent                  User            @relation(fields: [agentId], references: [id])
+  clientId               String?
+  client                 Client?         @relation(fields: [clientId], references: [id])
+  leadId                 String?
+  lead                   Lead?           @relation(fields: [leadId], references: [id])
+  productId              String
+  product                Product         @relation(fields: [productId], references: [id])
+  status                 OfferStatus     @default(DRAFT)
+  premiumAmount          Decimal         @db.Decimal(10, 2)
+  leadType               LeadType        @default(STANDARD)
+  // Operations validation fields
+  operationsNotes        String?
+  submittedToPartnerAt   DateTime?
+  partnerReferenceNumber String?
+  // Stripe fields (only when product.isConsultationFee = true)
+  paymentPlan            PaymentPlan?
+  installmentCount       Int?
+  stripeProductId        String?
+  stripePriceId          String?
+  notes                  String?
+  contract               Contract?
+  documents              OfferDocument[]
+  comments               OfferComment[]
+  expiresAt              DateTime?
+  deletedAt              DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  @@index([deletedAt])
+}
+
+// Immutable append-only timeline thread per Offer.
+// Records the conversation between Agent and Operations during validation.
+model OfferComment {
+  id         String   @id @default(cuid())
+  offerId    String
+  offer      Offer    @relation(fields: [offerId], references: [id])
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  authorRole UserRole
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([offerId])
+}
+
+model Contract {
+  id                    String             @id @default(cuid())
+  agentId               String
+  agent                 User               @relation(fields: [agentId], references: [id])
+  clientId              String
+  client                Client             @relation(fields: [clientId], references: [id])
+  offerId               String             @unique
+  offer                 Offer              @relation(fields: [offerId], references: [id])
+  status                ContractStatus     @default(ACTIVE)
+  leadType              LeadType
+  premiumAmount         Decimal            @db.Decimal(10, 2)
+  points                Decimal            @db.Decimal(10, 2)
+  startDate             DateTime
+  endDate               DateTime?
+  // Policy identification
+  // AXA/Mapfre/etc: official partner policy number — required before activating contract
+  // Consultation Fee: system-generated in format CF-YYYY-NNNN
+  policyNumber          String?            @unique
+  internalReference     String?            @unique
+  policyIssuedAt        DateTime?
+  // Stripe fields (only for consultation fee contracts)
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+  stripePaymentIntentId String?
+  stripePaymentStatus   String?
+  paymentPlan           PaymentPlan?
+  commissions           CommissionRecord[]
+  serviceRequests       ServiceRequest[]
+  documents             ContractDocument[]
+  signatureDocs         SignatureDocument[]
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+}
+
+// =============================================================================
+// INVITATION MODULE
+// =============================================================================
+
+model Invitation {
+  id          String           @id @default(cuid())
+  email       String
+  role        UserRole
+  rankId      String?
+  uplineId    String?
+  tokenHash   String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String
+  invitedBy   User             @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt   DateTime
+  claimedAt   DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([email])
+  @@index([status])
+}
+
+// =============================================================================
+// PROFILE MODULE
+// =============================================================================
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  bio       String?
+  avatarUrl String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ClientProfile {
+  id          String    @id @default(cuid())
+  clientId    String    @unique
+  client      Client    @relation(fields: [clientId], references: [id])
+  birthDate   DateTime?
+  occupation  String?
+  incomeRange String?
+  riskProfile String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// =============================================================================
+// DOCUMENT MODULE
+// =============================================================================
+
+model UserDocument {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  s3Key     String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+}
+
+model ClientDocument {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  name      String
+  s3Key     String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+}
+
+model OfferDocument {
+  id        String   @id @default(cuid())
+  offerId   String
+  offer     Offer    @relation(fields: [offerId], references: [id])
+  name      String
+  s3Key     String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+}
+
+model ContractDocument {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id])
+  name       String
+  s3Key      String
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+}
+
+// =============================================================================
+// DIGITAL SIGNATURE MODULE (Signaturit)
+// =============================================================================
+
+// DocumentTemplate is the catalog of signable documents per partner.
+// templateCode = Signaturit template ID — the bridge between UI dropdown and API call.
+// Adding a new document type requires only a new row — no code change.
+model DocumentTemplate {
+  id            String              @id @default(cuid())
+  partnerId     String
+  partner       Partner             @relation(fields: [partnerId], references: [id])
+  name          String
+  templateCode  String              @unique
+  description   String?
+  isActive      Boolean             @default(true)
+  signatureDocs SignatureDocument[]
+  createdAt     DateTime            @default(now())
+}
+
+// State machine:
+// DRAFT → SENT → VIEWED → SIGNED | DECLINED | EXPIRED | CANCELLED
+// MANUALLY_UPLOADED: Operations bypassed Signaturit and uploaded a signed PDF directly
+model SignatureDocument {
+  id                  String                  @id @default(cuid())
+  agentId             String
+  agent               User                    @relation(fields: [agentId], references: [id])
+  clientId            String
+  client              Client                  @relation(fields: [clientId], references: [id])
+  templateId          String
+  template            DocumentTemplate        @relation(fields: [templateId], references: [id])
+  contractId          String?
+  contract            Contract?               @relation(fields: [contractId], references: [id])
+  status              SignatureDocumentStatus @default(DRAFT)
+  signaturitRequestId String?                 @unique
+  signaturitAuditUrl  String?
+  signedDocumentS3Key String?
+  sentAt              DateTime?
+  viewedAt            DateTime?
+  signedAt            DateTime?
+  declinedAt          DateTime?
+  expiredAt           DateTime?
+  cancelledAt         DateTime?
+  declineReason       String?
+  notes               String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([clientId])
+  @@index([agentId])
+  @@index([status])
+}
+
+// =============================================================================
+// COMMISSION MODULE
+// =============================================================================
+
+model CommissionRecord {
+  id           String           @id @default(cuid())
+  contractId   String
+  contract     Contract         @relation(fields: [contractId], references: [id])
+  agentId      String
+  agent        User             @relation(fields: [agentId], references: [id])
+  payoutAmount Decimal          @db.Decimal(10, 2)
+  differential Decimal?         @db.Decimal(10, 2)
+  isOverride   Boolean          @default(false)
+  isDryRun     Boolean          @default(false)
+  status       CommissionStatus @default(PENDING)
+  calculatedAt DateTime         @default(now())
+  paidAt       DateTime?
+  cancelledAt  DateTime?
+  notes        String?
+  createdAt    DateTime         @default(now())
+
+  @@index([contractId])
+  @@index([agentId])
+}
+
+// =============================================================================
+// AFTER-SALES MODULE
+// =============================================================================
+
+model ServiceRequest {
+  id                     String               @id @default(cuid())
+  contractId             String
+  contract               Contract             @relation(fields: [contractId], references: [id])
+  agentId                String
+  agent                  User                 @relation(fields: [agentId], references: [id])
+  type                   ServiceRequestType
+  status                 ServiceRequestStatus @default(OPEN)
+  title                  String
+  description            String
+  submittedToPartnerAt   DateTime?
+  partnerReferenceNumber String?
+  resolvedAt             DateTime?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+}
+
+// =============================================================================
+// COMPLIANCE MODULE (GDPR / LOPD-GDD)
+// =============================================================================
+
+// Immutable append-only consent ledger.
+// Never update or delete rows. To revoke: insert a new row with granted = false.
+// Link to Lead (pre-conversion) OR Client (post-conversion) — never both on same row.
+model ConsentLog {
+  id                   String      @id @default(cuid())
+  consentType          ConsentType
+  granted              Boolean
+  leadId               String?
+  lead                 Lead?       @relation(fields: [leadId], references: [id])
+  clientId             String?
+  client               Client?     @relation(fields: [clientId], references: [id])
+  recordedById         String
+  ipAddress            String?
+  channel              String      // "web_form" | "phone" | "in_person" | "email"
+  privacyPolicyVersion String
+  notes                String?
+  revokedAt            DateTime?
+  createdAt            DateTime    @default(now())
+
+  @@index([leadId])
+  @@index([clientId])
+  @@index([consentType])
+}
+
+// =============================================================================
+// AUDIT MODULE
+// =============================================================================
+
+// Immutable append-only financial audit trail.
+// Scoped to: Contract, Offer (status changes), CommissionRecord (status + amount).
+// Never modify or delete rows.
+model AuditLog {
+  id            String      @id @default(cuid())
+  entity        AuditEntity
+  entityId      String
+  action        AuditAction
+  previousValue Json?
+  newValue      Json?
+  actorId       String?
+  actorType     String      // "agent" | "operations" | "admin" | "system" | "webhook"
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
