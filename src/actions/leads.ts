@@ -9,9 +9,14 @@ import { withRole, UnauthorizedError } from "@/lib/with-role";
 
 const leadSchema = z.object({
   id: z.string().optional(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  email: z.email().optional().or(z.literal("")),
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().min(1),
+  email: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || z.email().safeParse(value).success, {
+      message: "Email inválido",
+    }),
   phone: z.string().optional().or(z.literal("")),
   leadType: z.enum(["ATLAS", "STANDARD"]),
   source: z.string().optional().or(z.literal("")),
@@ -35,10 +40,19 @@ export const createLeadAction = withRole(
     }
 
     const parsed = leadSchema.safeParse(parseLeadFormData(formData));
-    if (!parsed.success) throw new Error("Invalid lead payload");
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0]?.message ?? "Payload inválido";
+      redirect(
+        `/dashboard/leads/new?type=error&message=${encodeURIComponent(firstIssue)}`,
+      );
+    }
 
     if (!parsed.data.consentDataProcessing) {
-      throw new Error("DATA_PROCESSING consent is required");
+      redirect(
+        `/dashboard/leads/new?type=error&message=${encodeURIComponent(
+          "Debes aceptar DATA_PROCESSING para crear el lead.",
+        )}`,
+      );
     }
 
     const finalAgentId =
@@ -266,17 +280,19 @@ export const archiveLeadAction = withRole(
 );
 
 function parseLeadFormData(formData: FormData) {
+  const leadTypeRaw = formData.get("leadType")?.toString().trim().toUpperCase();
   return {
     id: formData.get("id")?.toString(),
-    firstName: formData.get("firstName")?.toString() ?? "",
-    lastName: formData.get("lastName")?.toString() ?? "",
-    email: formData.get("email")?.toString() ?? "",
-    phone: formData.get("phone")?.toString() ?? "",
-    leadType: formData.get("leadType")?.toString() ?? "STANDARD",
-    source: formData.get("source")?.toString() ?? "",
-    notes: formData.get("notes")?.toString() ?? "",
+    firstName: formData.get("firstName")?.toString().trim() ?? "",
+    lastName: formData.get("lastName")?.toString().trim() ?? "",
+    email: formData.get("email")?.toString().trim() ?? "",
+    phone: formData.get("phone")?.toString().trim() ?? "",
+    leadType: leadTypeRaw === "ATLAS" ? "ATLAS" : "STANDARD",
+    source: formData.get("source")?.toString().trim() ?? "",
+    notes: formData.get("notes")?.toString().trim() ?? "",
     agentId: formData.get("agentId")?.toString() ?? "",
-    privacyPolicyVersion: formData.get("privacyPolicyVersion")?.toString() ?? "v1",
+    privacyPolicyVersion:
+      formData.get("privacyPolicyVersion")?.toString().trim() ?? "v1",
     consentDataProcessing: formData.get("consentDataProcessing") === "on",
     consentMarketingEmail: formData.get("consentMarketingEmail") === "on",
     consentMarketingPhone: formData.get("consentMarketingPhone") === "on",

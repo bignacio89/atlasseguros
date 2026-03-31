@@ -7,11 +7,18 @@ import { prisma } from "@/lib/prisma-client";
 import { createLeadAction } from "@/actions/leads";
 import { Button } from "@/components/ui/button";
 
-export default async function NewLeadPage() {
+type NewLeadPageProps = {
+  searchParams?: Promise<{ type?: string; message?: string }>;
+};
+
+export default async function NewLeadPage({ searchParams }: NewLeadPageProps) {
   const session = await auth();
   if (!session?.user) {
     redirect("/auth/login");
   }
+  const params = searchParams ? await searchParams : undefined;
+  const flashType = params?.type === "error" ? "error" : null;
+  const flashMessage = params?.message;
 
   const agents =
     session.user.role === "AGENT"
@@ -35,6 +42,15 @@ export default async function NewLeadPage() {
           Volver al listado
         </Link>
       </section>
+
+      {flashType === "error" && flashMessage ? (
+        <p
+          role="alert"
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
+          {flashMessage}
+        </p>
+      ) : null}
 
       <form action={createLeadAction} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
         <input type="hidden" name="privacyPolicyVersion" value="v1" />

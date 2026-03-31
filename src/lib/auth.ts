@@ -1,6 +1,7 @@
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
+import { scryptSync, timingSafeEqual } from "node:crypto";
 import type { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma-client";
 
@@ -54,8 +55,17 @@ export const authConfig = {
         });
 
         if (!user?.passwordHash) return null;
-        const isValid = await compare(password, user.passwordHash);
+        const isValid = await verifyPassword(password, user.passwordHash);
         if (!isValid) return null;
+
+        if (isLegacyScryptHash(user.passwordHash)) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              passwordHash: await hash(password, 12),
+            },
+          });
+        }
 
         return {
           id: user.id,
@@ -95,6 +105,33 @@ export const authConfig = {
     },
   },
 } satisfies Parameters<typeof NextAuth>[0];
+
+function isLegacyScryptHash(hashValue: string): boolean {
+  const [salt, digest] = hashValue.split(":");
+  return Boolean(
+    salt &&
+      digest &&
+      salt.length === 32 &&
+      /^[a-f0-9]+$/i.test(salt) &&
+      digest.length === 128 &&
+      /^[a-f0-9]+$/i.test(digest),
+  );
+}
+
+async function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
+  if (isLegacyScryptHash(passwordHash)) {
+    const [salt, digest] = passwordHash.split(":");
+    if (!salt || !digest) return false;
+    const computed = scryptSync(password, salt, 64).toString("hex");
+    try {
+      return timingSafeEqual(Buffer.from(computed, "hex"), Buffer.from(digest, "hex"));
+    } catch {
+      return false;
+    }
+  }
+
+  return compare(password, passwordHash);
+}
 
 export const {
   auth,

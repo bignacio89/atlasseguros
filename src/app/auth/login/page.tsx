@@ -2,9 +2,16 @@ import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { AuthError } from "next-auth";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{ error?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await auth();
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const hasInvalidCredentials = resolvedSearchParams?.error === "invalid_credentials";
 
   if (session?.user) {
     redirect("/dashboard");
@@ -15,11 +22,19 @@ export default async function LoginPage() {
     const email = formData.get("email")?.toString() ?? "";
     const password = formData.get("password")?.toString() ?? "";
 
-    await signIn("credentials", {
-      email,
-      password,
-      redirectTo: "/dashboard",
-    });
+    try {
+      await signIn("credentials", {
+        email,
+        password,
+        redirectTo: "/dashboard",
+      });
+    } catch (error) {
+      if (error instanceof AuthError && error.type === "CredentialsSignin") {
+        redirect("/auth/login?error=invalid_credentials");
+      }
+
+      throw error;
+    }
   }
 
   return (
@@ -31,6 +46,14 @@ export default async function LoginPage() {
         <p className="text-sm text-slate-600 mb-6">
           Accede al CRM de AtlasSeguros con tu correo y contraseña.
         </p>
+        {hasInvalidCredentials && (
+          <p
+            role="alert"
+            className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          >
+            Credenciales inválidas. Verifica tu correo y contraseña.
+          </p>
+        )}
 
         <form action={handleLogin} className="space-y-4">
           <div className="space-y-1">
