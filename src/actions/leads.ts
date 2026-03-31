@@ -165,8 +165,12 @@ export const convertLeadToClientAction = withRole(
       throw new UnauthorizedError("AGENT", "No puedes convertir este lead.");
     }
 
+    const isOptimistic = formData.get("optimistic")?.toString() === "1";
     if (lead.clientId) {
-      redirect(`/dashboard/clients/${lead.clientId}`);
+      if (!isOptimistic) {
+        redirect(`/dashboard/clients/${lead.clientId}`);
+      }
+      return { clientId: lead.clientId, leadId: lead.id };
     }
 
     if (!lead.email) {
@@ -211,7 +215,10 @@ export const convertLeadToClientAction = withRole(
       });
     });
 
-    redirect(`/dashboard/clients/${clientId}`);
+    if (!isOptimistic) {
+      redirect(`/dashboard/clients/${clientId}`);
+    }
+    return { clientId, leadId: lead.id };
   },
 );
 
@@ -226,6 +233,7 @@ export const archiveLeadAction = withRole(
       );
     }
 
+    const isOptimistic = formData.get("optimistic")?.toString() === "1";
     const leadId = formData.get("leadId")?.toString() ?? "";
     if (!leadId) throw new Error("Missing leadId");
 
@@ -235,7 +243,10 @@ export const archiveLeadAction = withRole(
     });
     if (!lead) throw new Error("Lead not found");
     if (lead.deletedAt) {
-      redirect("/dashboard/leads");
+      if (!isOptimistic) {
+        redirect("/dashboard/leads");
+      }
+      return { leadId };
     }
 
     if (session.user.role === "AGENT" && lead.agentId !== session.user.id) {
@@ -247,7 +258,10 @@ export const archiveLeadAction = withRole(
       data: { deletedAt: new Date() },
     });
 
-    redirect("/dashboard/leads");
+    if (!isOptimistic) {
+      redirect("/dashboard/leads");
+    }
+    return { leadId };
   },
 );
 

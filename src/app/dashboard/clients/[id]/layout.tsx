@@ -15,6 +15,7 @@ const tabs = [
   { key: "documents", label: "Documentos", suffix: "/documents" },
   { key: "activity", label: "Actividad", suffix: "/activity" },
   { key: "payments", label: "Pagos", suffix: "/payments" },
+  { key: "signatures", label: "Firmas", suffix: "/signatures" },
 ] as const;
 
 export default async function ClientProfileLayout({

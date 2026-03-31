@@ -37,25 +37,40 @@ const navItems: { href: string; label: string; roles: UserRole[] }[] = [
     label: "Agentes",
     roles: ["ADMIN"],
   },
+  {
+    href: "/dashboard/admin/partners",
+    label: "Partners",
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/dashboard/admin/rate-cards",
+    label: "RateCards",
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/dashboard/admin/audit-log",
+    label: "AuditLog",
+    roles: ["ADMIN"],
+  },
 ];
 
 export function Sidebar({ role }: SidebarProps) {
   const items = navItems.filter((item) => item.roles.includes(role));
 
   return (
-    <aside className="w-64 border-r border-slate-200 bg-white px-4 py-6">
+    <aside className="w-64 border-r border-slate-200 bg-white px-4 py-6 dark:border-slate-800 dark:bg-slate-950">
       <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           AtlasSeguros
         </p>
-        <p className="text-sm text-slate-600">CRM interno</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">CRM interno</p>
       </div>
       <nav className="space-y-1">
         {items.map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+            className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-50"
           >
             {item.label}
           </Link>

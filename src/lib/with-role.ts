@@ -1,4 +1,6 @@
 import type { UserRole } from "@prisma/client";
+import { prisma } from "@/lib/prisma-client";
+import { runWithRlsContext } from "@/lib/prisma-rls";
 
 export class UnauthorizedError extends Error {
   code = "UNAUTHORIZED" as const;
@@ -35,7 +37,11 @@ export function withRole<TArgs extends unknown[], TResult>(
       );
     }
 
-    return handler(...args);
+    return runWithRlsContext(
+      prisma,
+      { userId: session.user.id, role: session.user.role },
+      () => handler(...args),
+    );
   }) as (...args: TArgs) => Promise<TResult>;
 }
 
