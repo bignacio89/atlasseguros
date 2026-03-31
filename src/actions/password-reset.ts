@@ -51,7 +51,7 @@ export async function requestPasswordReset(
 }
 
 export async function resetPassword(
-  prevState: { error?: string; success?: boolean } | null,
+  _prevState: { error?: string; success?: boolean } | null,
   formData: FormData,
 ) {
   const token = formData.get("token")?.toString() ?? "";
@@ -59,11 +59,11 @@ export async function resetPassword(
   const confirmPassword = formData.get("confirmPassword")?.toString() ?? "";
 
   if (!token || !password || !confirmPassword) {
-    return { error: "Por favor completa todos los campos." };
+    return { error: "Por favor completa todos los campos." } as const;
   }
 
   if (password !== confirmPassword) {
-    return { error: "Las contraseñas no coinciden." };
+    return { error: "Las contraseñas no coinciden." } as const;
   }
 
   const crypto = await import("crypto");
@@ -76,7 +76,7 @@ export async function resetPassword(
   });
 
   if (!user || !user.passwordResetExpiresAt) {
-    return { error: "El enlace de restablecimiento no es válido o ha expirado." };
+    return { error: "El enlace de restablecimiento no es válido o ha expirado." } as const;
   }
 
   if (isAfter(new Date(), user.passwordResetExpiresAt)) {
@@ -87,7 +87,7 @@ export async function resetPassword(
         passwordResetExpiresAt: null,
       },
     });
-    return { error: "El enlace de restablecimiento ha expirado." };
+    return { error: "El enlace de restablecimiento ha expirado." } as const;
   }
 
   const passwordHash = await hash(password, 10);
@@ -101,7 +101,7 @@ export async function resetPassword(
     },
   });
 
-  return { success: true };
+  return { success: true } as const;
 }
 
 function sha256(

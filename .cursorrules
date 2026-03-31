@@ -1,0 +1,113 @@
+# AtlasSeguros CRM — Cursor Rules
+
+## Project Overview
+Production CRM for an insurance broker agency in Spain.
+Next.js 15 App Router, TypeScript strict, PostgreSQL via Supabase.
+
+## Tech Stack
+- Next.js 15 App Router
+- TypeScript (strict mode — zero any, zero ts-ignore)
+- Tailwind CSS + shadcn/ui
+- Prisma + PostgreSQL (Supabase)
+- NextAuth.js v5
+- TanStack Table + TanStack Query
+- React Hook Form + Zod
+- Recharts
+- Zustand (UI state only — never server state)
+- date-fns (es-ES locale for all date formatting)
+- AWS S3 pre-signed URLs
+- Stripe
+- Signaturit SDK
+- Resend (emails only — invitations, password reset, offer rejected, contract activated)
+
+## Absolute Rules — Never Break These
+
+### Prisma
+- Never import from `@prisma/client` directly in Server Actions or API routes
+- Always import from `@/lib/prisma-client` (the extended client with RLS + soft-delete)
+- Never hard-delete Lead, Client, or Offer — always set deletedAt = new Date()
+- Never update or delete AuditLog or ConsentLog rows — append only
+- Never update or delete OfferComment rows — append only
+
+### Security
+- Every Server Action that mutates data must be wrapped with withRole()
+- Import withRole from @/lib/with-role
+- Never trust role or userId from the request body — always read from session
+- Password reset and invitation tokens: store only SHA-256 hash in DB, never raw token
+
+### Commission Math (Phase A)
+- Guard: if product.commissionUpfrontPct === 0 return [] immediately
+- Gross = premiumAmount × commissionUpfrontPct
+- Net = Gross - (Gross × feePct)
+- Points = Net / 10
+- Store points on Contract before running waterfall
+
+### Commission Math (Phase C — Waterfall)
+- Seller payout = points × sellerRateCard.euroPerPoint (isOverride: false)
+- Each upline level: differential = managerRate - previousLevelRate
+- If differential <= 0: skip (no payout for that level)
+- If differential > 0: payout = points × differential (isOverride: true)
+- Rate lookup: WHERE rankId = ? AND leadType = ? AND effectiveDate <= contract.createdAt
+  ORDER BY effectiveDate DESC LIMIT 1
+
+### UI Rules
+- NO icons or emoticons anywhere — text labels only
+- NO hardcoded colors — always use CSS variables (var(--color-*))
+- All monetary values: Decimal type, 2 decimal places, never Float
+- All dates: date-fns with es-ES locale
+- Dark mode mandatory on every component
+
+### Role Access
+- ADMIN: invitations, partners, products, rateCards, documentTemplates, agents, audit log
+- OPERATIONS: offer validation queue, contract activation, after-sales execution, Stripe monitoring
+- AGENT: own leads/clients/offers, commissions, signatures — agentId = session.user.id always
+- Manager agents (FA1-DN): own pipeline only in list queries — getDownlineAgentIds() for KPI aggregation ONLY
+
+## Offer Status Machine
+DRAFT → PENDING_OPERATIONS_REVIEW → SUBMITTED_TO_PARTNER → ACCEPTED
+                                   ↘ REJECTED → (agent edits) → PENDING_OPERATIONS_REVIEW
+CANCELLED and EXPIRED are terminal states.
+ACCEPTED requires policyNumber + policyIssuedAt set by Operations.
+
+## File Naming Conventions
+- Server Actions: src/actions/[entity].ts
+- Services: src/services/[name].service.ts
+- Components: PascalCase — src/components/[module]/ComponentName.tsx
+- Lib utilities: src/lib/[name].ts
+
+## Key Files
+- src/lib/prisma-client.ts — ONLY Prisma client to import in app code
+- src/lib/with-role.ts — Server Action role guard
+- src/lib/internal-ref.ts — CF-YYYY-NNNN reference generator
+- src/lib/resend.ts — Resend email client
+- src/services/commission.service.ts — CommissionService (never inline commission logic)
+- src/services/audit.service.ts — AuditLog writes (use this, never write directly)
+
+## AuditLog — Write on Every State Change For:
+- Contract: CREATED, STATUS_CHANGED
+- Offer: STATUS_CHANGED
+- CommissionRecord: STATUS_CHANGED, AMOUNT_CHANGED, RECALCULATED
+- Always include previousValue, newValue as JSON snapshots
+- actorType: "agent" | "operations" | "admin" | "system" | "webhook"
+
+## Email Templates (Resend + React Email)
+Located in src/emails/
+- invitation.tsx
+- password-reset.tsx
+- offer-rejected.tsx
+- contract-activated.tsx
+
+## What NOT to Do
+- Never use useState for server data — use TanStack Query
+- Never use Zustand for server data — Zustand is for UI state only (slide-overs, wizards)
+- Never expose raw Stripe webhook without signature verification
+- Never expose raw Signaturit webhook without HMAC verification
+- Never generate CF-YYYY-NNNN with COUNT(*)+1 — use PostgreSQL sequence nextval()
+- Never call CommissionService inline in Contract creation — always call explicitly after
+- Never apply getDownlineAgentIds to client/lead list queries — KPI aggregation only
+- Never render Operations or Admin UI components for Agent role (not even hidden)
+- Never store files locally — always S3
+## Third-Party Service Abstraction
+- Payment calls: always through src/services/payment.service.ts — never import Stripe directly
+- Signature calls: always through src/services/signature.service.ts — never import Signaturit directly
+- This abstraction exists so providers can be swapped by replacing only the service file

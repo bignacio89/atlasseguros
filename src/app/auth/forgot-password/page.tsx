@@ -1,4 +1,6 @@
-import { useFormState } from "react-dom";
+"use client";
+
+import { useActionState } from "react";
 
 import { requestPasswordReset } from "@/actions/password-reset";
 import { Button } from "@/components/ui/button";
@@ -6,7 +8,7 @@ import { Button } from "@/components/ui/button";
 const initialState: { success?: boolean } = {};
 
 export default function ForgotPasswordPage() {
-  const [state, formAction] = useFormState(
+  const [state, formAction] = useActionState(
     requestPasswordReset,
     initialState,
   );

@@ -5,8 +5,7 @@ const fromAddress = process.env.RESEND_FROM_ADDRESS;
 
 if (!apiKey || !fromAddress) {
   // In dev this may be unset; we fail lazily when sending.
-  // eslint-disable-next-line no-console
-  console.warn(
+    console.warn(
     "[resend] RESEND_API_KEY or RESEND_FROM_ADDRESS is not configured",
   );
 }

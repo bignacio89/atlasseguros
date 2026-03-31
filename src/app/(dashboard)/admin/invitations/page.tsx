@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma-client";
-import { createInvitation } from "@/services/invitation.service";
+import { createInvitationAction } from "@/actions/invitations";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminInvitationsPage() {
@@ -13,7 +15,7 @@ export default async function AdminInvitationsPage() {
     redirect("/403");
   }
 
-  const [ranks, agents, invitations] = await Promise.all([
+  const [ranks, agents, invitationsRaw] = await Promise.all([
     prisma.rank.findMany({
       orderBy: { levelOrder: "asc" },
     }),
@@ -24,15 +26,17 @@ export default async function AdminInvitationsPage() {
     }),
     prisma.invitation.findMany({
       orderBy: { createdAt: "desc" },
-      include: {
-        rank: true,
-        upline: {
-          select: { id: true, name: true, email: true },
-        },
-      },
       take: 50,
     }),
   ]);
+
+  const rankById = new Map(ranks.map((rank) => [rank.id, rank]));
+  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+  const invitations = invitationsRaw.map((invitation) => ({
+    ...invitation,
+    rank: invitation.rankId ? rankById.get(invitation.rankId) ?? null : null,
+    upline: invitation.uplineId ? agentById.get(invitation.uplineId) ?? null : null,
+  }));
 
   return (
     <div className="space-y-8">
@@ -50,11 +54,7 @@ export default async function AdminInvitationsPage() {
           Nueva invitación
         </h2>
         <Suspense fallback={null}>
-          <InvitationForm
-            ranks={ranks}
-            agents={agents}
-            invitedById={session.user.id}
-          />
+          <InvitationForm ranks={ranks} agents={agents} />
         </Suspense>
       </section>
 
@@ -71,32 +71,11 @@ export default async function AdminInvitationsPage() {
 type InvitationFormProps = {
   ranks: { id: string; name: string }[];
   agents: { id: string; name: string | null; email: string }[];
-  invitedById: string;
 };
 
-function InvitationForm({ ranks, agents, invitedById }: InvitationFormProps) {
-  async function handleInvite(formData: FormData) {
-    "use server";
-
-    const email = formData.get("email")?.toString().trim().toLowerCase() ?? "";
-    const role = formData.get("role")?.toString() as
-      | "ADMIN"
-      | "OPERATIONS"
-      | "AGENT";
-    const rankIdRaw = formData.get("rankId")?.toString() ?? "";
-    const uplineIdRaw = formData.get("uplineId")?.toString() ?? "";
-
-    await createInvitation({
-      email,
-      role,
-      rankId: role === "AGENT" && rankIdRaw ? rankIdRaw : null,
-      uplineId: role === "AGENT" && uplineIdRaw ? uplineIdRaw : null,
-      invitedById,
-    });
-  }
-
+function InvitationForm({ ranks, agents }: InvitationFormProps) {
   return (
-    <form action={handleInvite} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+    <form action={createInvitationAction} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
       <div className="space-y-1">
         <label className="block text-xs font-medium text-slate-700">
           Correo electrónico
@@ -166,7 +145,12 @@ function InvitationForm({ ranks, agents, invitedById }: InvitationFormProps) {
 }
 
 type InvitationTableProps = {
-  invitations: Awaited<ReturnType<typeof prisma.invitation.findMany>>;
+  invitations: Array<
+    Awaited<ReturnType<typeof prisma.invitation.findMany>>[number] & {
+      rank: { id: string; name: string } | null;
+      upline: { id: string; name: string | null; email: string } | null;
+    }
+  >;
 };
 
 function InvitationTable({ invitations }: InvitationTableProps) {
@@ -206,7 +190,7 @@ function InvitationTable({ invitations }: InvitationTableProps) {
                 <StatusBadge status={inv.status} />
               </td>
               <td className="py-2 text-slate-500">
-                {inv.createdAt.toLocaleString("es-ES")}
+                {format(inv.createdAt, "dd/MM/yyyy HH:mm", { locale: es })}
               </td>
             </tr>
           ))}

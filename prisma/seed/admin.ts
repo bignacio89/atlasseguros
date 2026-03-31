@@ -41,8 +41,7 @@ export async function seedInitialAdmin() {
     },
   });
 
-  // eslint-disable-next-line no-console
-  console.log(
+    console.log(
     `Seeded initial admin user:\n  email: ${email}\n  password: (from SEED_ADMIN_PASSWORD)`,
   );
 }

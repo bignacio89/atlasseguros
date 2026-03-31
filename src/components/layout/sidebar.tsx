@@ -6,12 +6,35 @@ type SidebarProps = {
 };
 
 const navItems: { href: string; label: string; roles: UserRole[] }[] = [
+  { href: "/dashboard", label: "Dashboard", roles: ["ADMIN", "OPERATIONS", "AGENT"] },
   { href: "/dashboard/leads", label: "Leads", roles: ["ADMIN", "OPERATIONS", "AGENT"] },
   { href: "/dashboard/clients", label: "Clientes", roles: ["ADMIN", "OPERATIONS", "AGENT"] },
   { href: "/dashboard/offers", label: "Ofertas", roles: ["ADMIN", "OPERATIONS", "AGENT"] },
+  { href: "/dashboard/contracts", label: "Contratos", roles: ["ADMIN", "OPERATIONS", "AGENT"] },
+  { href: "/dashboard/commissions", label: "Comisiones", roles: ["ADMIN", "OPERATIONS", "AGENT"] },
+  {
+    href: "/dashboard/operations/offers",
+    label: "Validacion ofertas",
+    roles: ["ADMIN", "OPERATIONS"],
+  },
+  {
+    href: "/dashboard/operations/after-sales",
+    label: "Cola postventa",
+    roles: ["ADMIN", "OPERATIONS"],
+  },
+  {
+    href: "/dashboard/operations/payments",
+    label: "Monitoreo pagos",
+    roles: ["ADMIN", "OPERATIONS"],
+  },
   {
     href: "/dashboard/admin/invitations",
     label: "Invitaciones",
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/dashboard/admin/agents",
+    label: "Agentes",
     roles: ["ADMIN"],
   },
 ];

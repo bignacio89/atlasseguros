@@ -13,15 +13,15 @@ export class UnauthorizedError extends Error {
   }
 }
 
-export function withRole<T extends (...args: any[]) => Promise<any>>(
+export function withRole<TArgs extends unknown[], TResult>(
   requiredRole: UserRole | UserRole[],
-  handler: T,
+  handler: (...args: TArgs) => Promise<TResult>,
 ) {
   const roles = Array.isArray(requiredRole)
     ? requiredRole
     : [requiredRole];
 
-  return (async (...args: Parameters<T>) => {
+  return (async (...args: TArgs) => {
     const session = await import("@/lib/auth").then((m) => m.auth());
 
     if (!session?.user) {
@@ -36,6 +36,6 @@ export function withRole<T extends (...args: any[]) => Promise<any>>(
     }
 
     return handler(...args);
-  }) as T;
+  }) as (...args: TArgs) => Promise<TResult>;
 }
 

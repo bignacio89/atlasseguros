@@ -1,6 +1,4 @@
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
-import { useFormState } from "react-dom";
 
 import { getInvitationByToken, registerFromInvitation } from "@/actions/invitations";
 import { Button } from "@/components/ui/button";
@@ -8,6 +6,7 @@ import { Button } from "@/components/ui/button";
 type RegisterPageProps = {
   searchParams: {
     token?: string;
+    error?: string;
   };
 };
 
@@ -24,7 +23,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
     redirect("/auth/login");
   }
 
-  const initialState: { error?: string } = {};
+  const error = searchParams?.error;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
@@ -54,9 +53,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
           </dd>
         </dl>
 
-        <Suspense fallback={null}>
-          <RegisterForm token={token} initialState={initialState} />
-        </Suspense>
+        <RegisterForm token={token} error={error} />
       </div>
     </div>
   );
@@ -64,14 +61,12 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
 
 type RegisterFormProps = {
   token: string;
-  initialState: { error?: string };
+  error?: string;
 };
 
-function RegisterForm({ token, initialState }: RegisterFormProps) {
-  const [state, formAction] = useFormState(registerFromInvitation, initialState);
-
+function RegisterForm({ token, error }: RegisterFormProps) {
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={registerFromInvitation} className="space-y-4">
       <input type="hidden" name="token" value={token} />
 
       <div className="space-y-1">
@@ -122,8 +117,8 @@ function RegisterForm({ token, initialState }: RegisterFormProps) {
         />
       </div>
 
-      {state?.error && (
-        <p className="text-sm text-red-600">{state.error}</p>
+      {error && (
+        <p className="text-sm text-red-600">No se ha podido completar el registro.</p>
       )}
 
       <Button type="submit" className="w-full">
