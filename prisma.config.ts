@@ -10,6 +10,11 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // Prisma spawns the seed command without guaranteeing PATH includes `node_modules/.bin`,
+    // so we call the local ts-node binary directly.
+    // Force CommonJS for seed execution; otherwise Node's ESM resolver
+    // can fail on extensionless relative imports in TS seed files.
+    seed: "./node_modules/.bin/ts-node -O {\"module\":\"CommonJS\"} ./prisma/seed/index.ts",
   },
   datasource: {
     url: process.env["DATABASE_URL"],
